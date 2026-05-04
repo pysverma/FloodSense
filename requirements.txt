@@ -1,5 +1,6 @@
 # ── Cloud API (Render) ──────────────
 flask
+flask-cors
 pandas
 numpy
 scikit-learn
@@ -9,6 +10,7 @@ seaborn
 requests
 twilio
 gunicorn
+
 
 
 # ── PC Serial Bridge (your laptop) ──
