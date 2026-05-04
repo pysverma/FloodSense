@@ -107,9 +107,9 @@ def send_sms_alert(probability: float, location: str = "Uttarakhand"):
         sent = []
         for number in ALERT_PHONE_NUMBERS:
             msg = client.messages.create(
-                body=message_body,
-                from_=TWILIO_FROM_NUMBER,
-                to=number.strip()
+                 body=message_body,
+                 messaging_service_sid=os.getenv("TWILIO_MESSAGING_SERVICE_SID"),
+                 to=number.strip()
             )
             sent.append({"to": number, "sid": msg.sid})
             logger.info(f"📱 SMS sent to {number}: {msg.sid}")
