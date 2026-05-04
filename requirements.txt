@@ -7,7 +7,6 @@ tensorflow
 joblib
 matplotlib
 seaborn
-tensorflow
 requests
 twilio
 gunicorn
