@@ -3,7 +3,6 @@ flask
 pandas
 numpy
 scikit-learn
-tensorflow
 joblib
 matplotlib
 seaborn
