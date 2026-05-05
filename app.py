@@ -118,7 +118,8 @@ def send_sms_alert(probability: float, location: str = "Uttarakhand"):
     except Exception as e:
         logger.error(f"❌ SMS error: {e}")
         return {"status": "error", "error": str(e)}
-
+print("SID:", TWILIO_ACCOUNT_SID)
+print("TOKEN:", TWILIO_AUTH_TOKEN[:5] + "*****")
 
 def get_risk_level(probability: float) -> dict:
     if probability >= 0.75:
