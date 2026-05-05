@@ -185,7 +185,7 @@ def predict():
 
         # Ensemble probability (average)
         ensemble_prob = float(np.mean(probabilities))
-        flood_predicted = ensemble_prob >= 0.5
+        flood_predicted = ensemble_prob >= 0.25
         risk = get_risk_level(ensemble_prob)
 
         # Build result
@@ -211,7 +211,7 @@ def predict():
 
         # Send SMS if flood risk is HIGH or MODERATE
         sms_status = {"status": "not_sent", "reason": "risk_below_threshold"}
-        if ensemble_prob >= 0.5:
+        if ensemble_prob >= 0.25:
             location = data.get("location", "Uttarakhand")
             sms_status = send_sms_alert(ensemble_prob, location)
             result["sms_alert"] = sms_status
