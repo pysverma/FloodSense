@@ -1,0 +1,1185 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="description" content="FloodSense — Real-time IoT and ML flood prediction system for Uttarakhand">
+<meta property="og:title" content="FloodSense — Flood Prediction Dashboard">
+<meta property="og:description" content="Real-time flood prediction using IoT sensors and machine learning">
+<meta property="og:type" content="website">
+<title>FloodSense — Flood Prediction Dashboard</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Mono:wght@400;700&family=Syne:wght@400;600;700;800&display=swap" rel="stylesheet">
+<style>
+/* ── Reset & Variables ─────────────────────────────────────── */
+:root {
+  --bg:      #04080f;
+  --panel:   #0a1220;
+  --border:  #1a2a40;
+  --accent:  #00d4ff;
+  --accent2: #0066ff;
+  --warn:    #ff9500;
+  --danger:  #ff2d55;
+  --safe:    #30d158;
+  --text:    #e2eaf4;
+  --muted:   #5a7a99;
+  --glow:    rgba(0,212,255,0.15);
+  --radius:  14px;
+}
+*{margin:0;padding:0;box-sizing:border-box;}
+html{scroll-behavior:smooth;}
+body{
+  background:var(--bg);color:var(--text);
+  font-family:'Syne',sans-serif;
+  min-height:100vh;overflow-x:hidden;
+}
+body::before{
+  content:'';position:fixed;inset:0;
+  background-image:
+    linear-gradient(rgba(0,212,255,0.03) 1px,transparent 1px),
+    linear-gradient(90deg,rgba(0,212,255,0.03) 1px,transparent 1px);
+  background-size:40px 40px;
+  pointer-events:none;z-index:0;
+}
+#rain-canvas{position:fixed;inset:0;pointer-events:none;z-index:0;opacity:0.12;}
+
+/* ── Layout ────────────────────────────────────────────────── */
+.layout{position:relative;z-index:1;max-width:1440px;margin:0 auto;padding:24px 28px;}
+@media(max-width:700px){.layout{padding:16px;}}
+
+/* ── Header ────────────────────────────────────────────────── */
+header{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-bottom:28px;padding-bottom:20px;
+  border-bottom:1px solid var(--border);
+  flex-wrap:wrap;gap:14px;
+}
+.logo{display:flex;align-items:center;gap:14px;}
+.logo-icon{
+  width:48px;height:48px;
+  background:linear-gradient(135deg,var(--accent),var(--accent2));
+  border-radius:12px;display:flex;align-items:center;justify-content:center;
+  font-size:22px;box-shadow:0 0 24px var(--glow);flex-shrink:0;
+}
+.logo-text h1{
+  font-size:26px;font-weight:800;letter-spacing:-0.5px;
+  background:linear-gradient(90deg,var(--accent),#fff);
+  -webkit-background-clip:text;-webkit-text-fill-color:transparent;
+}
+.logo-text p{color:var(--muted);font-size:12px;font-family:'Space Mono',monospace;margin-top:2px;}
+.header-right{display:flex;align-items:center;gap:14px;flex-wrap:wrap;}
+.live-badge{
+  display:flex;align-items:center;gap:7px;
+  background:rgba(48,209,88,0.1);border:1px solid rgba(48,209,88,0.3);
+  border-radius:20px;padding:5px 12px;
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--safe);
+}
+.pulse-dot{
+  width:7px;height:7px;background:var(--safe);border-radius:50%;
+  animation:pulse 1.5s ease-in-out infinite;
+}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1);}50%{opacity:.4;transform:scale(.7);}}
+.clock{font-family:'Space Mono',monospace;font-size:13px;color:var(--muted);}
+.conn-pill{
+  font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);
+  padding:4px 10px;border:1px solid var(--border);border-radius:6px;
+  cursor:pointer;transition:all .2s;
+}
+.conn-pill:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── Risk Banner ───────────────────────────────────────────── */
+#risk-banner{
+  border-radius:var(--radius);padding:18px 24px;margin-bottom:24px;
+  display:flex;align-items:center;justify-content:space-between;
+  transition:all .5s;border:1px solid transparent;flex-wrap:wrap;gap:12px;
+}
+#risk-banner.SAFE    {background:rgba(48,209,88,0.08);border-color:rgba(48,209,88,.3);}
+#risk-banner.LOW     {background:rgba(0,102,255,0.08);border-color:rgba(0,102,255,.3);}
+#risk-banner.MODERATE{background:rgba(255,149,0,0.08);border-color:rgba(255,149,0,.3);}
+#risk-banner.HIGH    {background:rgba(255,45,85,0.12);border-color:rgba(255,45,85,.4);
+                      animation:danger-pulse 2s ease-in-out infinite;}
+@keyframes danger-pulse{
+  0%,100%{box-shadow:0 0 0 0 rgba(255,45,85,0);}
+  50%{box-shadow:0 0 0 10px rgba(255,45,85,.08);}
+}
+.banner-left{display:flex;align-items:center;gap:14px;}
+.banner-icon{font-size:30px;}
+.banner-title{font-size:20px;font-weight:700;}
+.banner-sub{font-size:12px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:3px;}
+.prob-big{font-family:'Space Mono',monospace;font-size:44px;font-weight:700;line-height:1;}
+.banner-prob-label{font-family:'Space Mono',monospace;font-size:11px;color:var(--muted);text-align:right;}
+
+/* ── Sensor Grid ───────────────────────────────────────────── */
+.sensor-grid{
+  display:grid;
+  grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+  gap:14px;margin-bottom:22px;
+}
+.sensor-card{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--radius);padding:16px 18px;position:relative;
+  transition:border-color .3s,box-shadow .3s;
+}
+.sensor-card:hover{border-color:var(--accent);box-shadow:0 0 18px var(--glow);}
+.sensor-name{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;
+  letter-spacing:1px;text-transform:uppercase;margin-bottom:6px;}
+.sensor-val{font-family:'Space Mono',monospace;font-size:26px;font-weight:700;
+  color:var(--accent);line-height:1;}
+.sensor-unit{font-size:12px;color:var(--muted);margin-left:3px;}
+.sensor-ico{position:absolute;top:14px;right:14px;font-size:20px;opacity:.45;}
+.sbar{margin-top:10px;height:3px;background:var(--border);border-radius:2px;overflow:hidden;}
+.sbar-fill{height:100%;border-radius:2px;
+  background:linear-gradient(90deg,var(--accent2),var(--accent));
+  transition:width .9s cubic-bezier(.4,0,.2,1);}
+
+/* ── Tabs ──────────────────────────────────────────────────── */
+.tabs{display:flex;gap:4px;margin-bottom:18px;flex-wrap:wrap;}
+.tab{
+  padding:8px 16px;border-radius:8px;font-size:13px;font-weight:600;
+  cursor:pointer;background:transparent;border:1px solid transparent;
+  color:var(--muted);transition:all .2s;white-space:nowrap;
+}
+.tab.active{background:rgba(0,212,255,.1);border-color:var(--accent);color:var(--accent);}
+.tab:hover:not(.active){color:var(--text);border-color:var(--border);}
+.tab-content{display:none;}
+.tab-content.active{display:block;}
+
+/* ── Panel ─────────────────────────────────────────────────── */
+.panel{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:var(--radius);padding:20px 22px;position:relative;overflow:hidden;
+}
+.panel::before{
+  content:'';position:absolute;top:0;left:0;right:0;height:1px;
+  background:linear-gradient(90deg,transparent,var(--accent),transparent);opacity:.3;
+}
+.panel-title{
+  font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
+  color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:14px;
+  display:flex;align-items:center;gap:8px;
+}
+.mt-4{margin-top:16px;}
+.mt-6{margin-top:22px;}
+.grid-2{display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:18px;}
+@media(max-width:860px){.grid-3{grid-template-columns:1fr 1fr;}.grid-2{grid-template-columns:1fr;}}
+@media(max-width:560px){.grid-3{grid-template-columns:1fr;}}
+.divider{border:none;border-top:1px solid var(--border);margin:18px 0;}
+.flex-end{display:flex;justify-content:flex-end;gap:10px;flex-wrap:wrap;}
+.flex-between{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;}
+
+/* ── Form ──────────────────────────────────────────────────── */
+.form-grid{
+  display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));
+  gap:12px;margin-bottom:18px;
+}
+.form-group{display:flex;flex-direction:column;gap:5px;}
+label{font-size:10px;color:var(--muted);font-family:'Space Mono',monospace;
+  letter-spacing:1px;text-transform:uppercase;}
+input,select{
+  background:rgba(255,255,255,.04);border:1px solid var(--border);
+  border-radius:8px;color:var(--text);padding:9px 11px;
+  font-family:'Space Mono',monospace;font-size:13px;outline:none;
+  transition:border-color .2s,box-shadow .2s;width:100%;
+}
+input:focus,select:focus{border-color:var(--accent);box-shadow:0 0 0 3px rgba(0,212,255,.1);}
+select option{background:#0a1220;}
+
+/* ── Buttons ───────────────────────────────────────────────── */
+.btn{
+  padding:11px 22px;border:none;border-radius:9px;
+  font-family:'Syne',sans-serif;font-size:14px;font-weight:700;
+  cursor:pointer;transition:all .2s;letter-spacing:.3px;
+}
+.btn-primary{
+  background:linear-gradient(135deg,var(--accent2),var(--accent));
+  color:#000;box-shadow:0 4px 18px rgba(0,212,255,.25);
+}
+.btn-primary:hover{transform:translateY(-1px);box-shadow:0 8px 28px rgba(0,212,255,.4);}
+.btn-primary:active{transform:translateY(0);}
+.btn-primary:disabled{opacity:.5;cursor:not-allowed;transform:none;}
+.btn-ghost{
+  background:transparent;border:1px solid var(--border);
+  color:var(--muted);padding:9px 16px;font-size:12px;
+}
+.btn-ghost:hover{border-color:var(--accent);color:var(--accent);}
+
+/* ── Table ─────────────────────────────────────────────────── */
+.table-wrap{overflow-x:auto;}
+table{width:100%;border-collapse:collapse;font-family:'Space Mono',monospace;font-size:12px;}
+th{text-align:left;padding:9px 11px;color:var(--muted);font-size:10px;
+  letter-spacing:1.5px;text-transform:uppercase;border-bottom:1px solid var(--border);}
+td{padding:11px;border-bottom:1px solid rgba(26,42,64,.5);vertical-align:middle;}
+tr:hover td{background:rgba(0,212,255,.02);}
+.badge{display:inline-block;padding:2px 8px;border-radius:4px;font-size:10px;font-weight:700;}
+.badge-best{background:rgba(0,212,255,.15);color:var(--accent);border:1px solid rgba(0,212,255,.3);}
+.badge-great{background:rgba(48,209,88,.1);color:var(--safe);}
+.badge-good{background:rgba(255,149,0,.1);color:var(--warn);}
+.mbar{display:flex;align-items:center;gap:7px;}
+.mbar-fill{height:5px;border-radius:3px;min-width:3px;transition:width .8s;}
+
+/* ── History ───────────────────────────────────────────────── */
+.log-entry{
+  display:flex;align-items:center;gap:12px;
+  padding:10px 0;border-bottom:1px solid rgba(26,42,64,.5);
+  font-family:'Space Mono',monospace;font-size:12px;
+  animation:fadeIn .4s ease;
+}
+@keyframes fadeIn{from{opacity:0;transform:translateY(-5px);}to{opacity:1;transform:none;}}
+.log-time{color:var(--muted);min-width:65px;}
+.log-risk{padding:2px 9px;border-radius:4px;font-size:10px;font-weight:700;min-width:78px;text-align:center;}
+.risk-HIGH    {background:rgba(255,45,85,.2);color:var(--danger);}
+.risk-MODERATE{background:rgba(255,149,0,.2);color:var(--warn);}
+.risk-LOW     {background:rgba(0,102,255,.2);color:#66aaff;}
+.risk-SAFE    {background:rgba(48,209,88,.15);color:var(--safe);}
+
+/* ── Arc SVG ───────────────────────────────────────────────── */
+.arc-svg{overflow:visible;}
+
+/* ── Toast ─────────────────────────────────────────────────── */
+#toast{
+  position:fixed;bottom:28px;right:28px;
+  background:var(--panel);border:1px solid var(--safe);border-radius:var(--radius);
+  padding:16px 20px;display:flex;align-items:center;gap:12px;
+  box-shadow:0 8px 36px rgba(0,0,0,.5);z-index:9999;
+  transform:translateX(160%);transition:transform .4s cubic-bezier(.175,.885,.32,1.275);
+  max-width:300px;
+}
+#toast.show{transform:translateX(0);}
+.toast-ico{font-size:24px;}
+.toast-body h4{font-size:13px;font-weight:700;color:var(--safe);}
+.toast-body p{font-size:11px;color:var(--muted);font-family:'Space Mono',monospace;margin-top:1px;}
+
+/* ── Spinner ───────────────────────────────────────────────── */
+.spin{
+  display:inline-block;width:14px;height:14px;
+  border:2px solid rgba(0,212,255,.3);border-top-color:var(--accent);
+  border-radius:50%;animation:spinning .8s linear infinite;
+  vertical-align:middle;margin-right:6px;
+}
+@keyframes spinning{to{transform:rotate(360deg);}}
+
+/* ── Settings modal ────────────────────────────────────────── */
+#settings-modal{
+  display:none;position:fixed;inset:0;background:rgba(4,8,15,.85);
+  z-index:9000;align-items:center;justify-content:center;
+}
+#settings-modal.open{display:flex;}
+.modal-box{
+  background:var(--panel);border:1px solid var(--border);
+  border-radius:18px;padding:28px;width:90%;max-width:500px;
+  position:relative;
+}
+.modal-title{font-size:16px;font-weight:800;margin-bottom:20px;}
+.modal-close{
+  position:absolute;top:18px;right:18px;background:none;border:none;
+  color:var(--muted);font-size:20px;cursor:pointer;line-height:1;
+}
+.modal-close:hover{color:var(--text);}
+
+/* ── Auto-poll indicator ───────────────────────────────────── */
+.poll-badge{
+  font-family:'Space Mono',monospace;font-size:10px;
+  color:var(--accent);display:flex;align-items:center;gap:5px;
+  opacity:0;transition:opacity .3s;
+}
+.poll-badge.visible{opacity:1;}
+
+/* ── Wiring table ──────────────────────────────────────────── */
+.wire-table{font-family:'Space Mono',monospace;font-size:13px;line-height:2.1;width:100%;}
+.wire-table td{padding:4px 10px;border-bottom:1px solid rgba(26,42,64,.4);}
+.wire-table td:first-child{color:var(--muted);width:130px;}
+.wire-table td:nth-child(2){color:var(--accent);width:80px;}
+.wire-table td:last-child{color:var(--text);}
+.step-num{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:28px;height:28px;border-radius:50%;
+  background:rgba(0,212,255,.15);border:1px solid rgba(0,212,255,.3);
+  color:var(--accent);font-weight:700;font-size:13px;flex-shrink:0;
+}
+</style>
+</head>
+<body>
+
+<canvas id="rain-canvas"></canvas>
+
+<!-- Settings Modal -->
+<div id="settings-modal">
+  <div class="modal-box">
+    <div class="modal-title">⚙️ Settings</div>
+    <button class="modal-close" onclick="closeSettings()">✕</button>
+    <div class="form-group" style="margin-bottom:14px">
+      <label>Cloud API URL (your Render.com URL)</label>
+      <input type="text" id="api-url-input"
+        placeholder="https://floodsense-api.onrender.com">
+    </div>
+    <div class="form-group" style="margin-bottom:20px">
+      <label>Auto-poll for latest sensor data (seconds, 0 = off)</label>
+      <input type="number" id="poll-interval" value="0" min="0" max="300" step="10">
+    </div>
+    <div style="display:flex;gap:10px;justify-content:flex-end;flex-wrap:wrap">
+      <button class="btn btn-ghost" onclick="testAPI()">Ping API</button>
+      <button class="btn btn-primary" onclick="saveSettings()">Save & Close</button>
+    </div>
+    <p style="margin-top:14px;font-family:Space Mono;font-size:11px;color:var(--muted);">
+      💡 After deploying on Render.com, paste your URL here.<br>
+      The dashboard works in demo mode without an API.
+    </p>
+  </div>
+</div>
+
+<!-- Toast -->
+<div id="toast">
+  <div class="toast-ico">📱</div>
+  <div class="toast-body">
+    <h4 id="toast-title">SMS Alert Sent!</h4>
+    <p id="toast-msg">Emergency contacts notified</p>
+  </div>
+</div>
+
+<div class="layout">
+
+  <!-- ── Header ── -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">🌊</div>
+      <div class="logo-text">
+        <h1>FloodSense</h1>
+        <p>IoT + ML Flood Prediction · Uttarakhand</p>
+      </div>
+    </div>
+    <div class="header-right">
+      <div class="poll-badge" id="poll-badge">
+        <span class="spin" style="width:10px;height:10px;margin:0"></span>
+        Polling live data…
+      </div>
+      <span class="conn-pill" id="conn-pill" onclick="openSettings()">● DEMO MODE</span>
+      <div class="live-badge"><span class="pulse-dot"></span>LIVE</div>
+      <div class="clock" id="clock">--:--:--</div>
+      <button class="btn btn-ghost" onclick="openSettings()" title="Settings">⚙️</button>
+    </div>
+  </header>
+
+  <!-- ── Risk Banner ── -->
+  <div id="risk-banner" class="SAFE">
+    <div class="banner-left">
+      <div class="banner-icon" id="banner-icon">✅</div>
+      <div>
+        <div class="banner-title" id="banner-title">System Ready — Awaiting Prediction</div>
+        <div class="banner-sub" id="banner-sub">Enter sensor values below or connect to live API</div>
+      </div>
+    </div>
+    <div style="text-align:right">
+      <div class="prob-big" id="banner-prob" style="color:var(--accent)">—</div>
+      <div class="banner-prob-label">ensemble probability</div>
+    </div>
+  </div>
+
+  <!-- ── Sensor Cards ── -->
+  <div style="font-size:11px;font-weight:600;letter-spacing:2px;text-transform:uppercase;
+    color:var(--muted);font-family:'Space Mono',monospace;margin-bottom:12px;
+    display:flex;align-items:center;gap:8px;">
+    📡 &nbsp;LIVE SENSOR READINGS
+  </div>
+  <div class="sensor-grid">
+    <div class="sensor-card"><div class="sensor-name">Rainfall</div>
+      <div class="sensor-val" id="sv-rain">—<span class="sensor-unit">mm</span></div>
+      <div class="sensor-ico">🌧</div><div class="sbar"><div class="sbar-fill" id="sb-rain" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">Temperature</div>
+      <div class="sensor-val" id="sv-temp">—<span class="sensor-unit">°C</span></div>
+      <div class="sensor-ico">🌡</div><div class="sbar"><div class="sbar-fill" id="sb-temp" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">Humidity</div>
+      <div class="sensor-val" id="sv-humid">—<span class="sensor-unit">%</span></div>
+      <div class="sensor-ico">💧</div><div class="sbar"><div class="sbar-fill" id="sb-humid" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">Water Level</div>
+      <div class="sensor-val" id="sv-water">—<span class="sensor-unit">m</span></div>
+      <div class="sensor-ico">🌊</div><div class="sbar"><div class="sbar-fill" id="sb-water" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">Soil Moisture</div>
+      <div class="sensor-val" id="sv-soil">—<span class="sensor-unit">%</span></div>
+      <div class="sensor-ico">🌱</div><div class="sbar"><div class="sbar-fill" id="sb-soil" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">Pressure</div>
+      <div class="sensor-val" id="sv-pres">—<span class="sensor-unit">hPa</span></div>
+      <div class="sensor-ico">🌬</div><div class="sbar"><div class="sbar-fill" id="sb-pres" style="width:0"></div></div></div>
+    <div class="sensor-card"><div class="sensor-name">River Discharge</div>
+      <div class="sensor-val" id="sv-disc">—<span class="sensor-unit">m³/s</span></div>
+      <div class="sensor-ico">🏞</div><div class="sbar"><div class="sbar-fill" id="sb-disc" style="width:0"></div></div></div>
+  </div>
+
+  <!-- ── Tabs ── -->
+  <div class="tabs">
+    <button class="tab active" onclick="switchTab('predict')">🔮 Predict</button>
+    <button class="tab" onclick="switchTab('models')">📊 Models</button>
+    <button class="tab" onclick="switchTab('history')">📋 History</button>
+    <button class="tab" onclick="switchTab('wiring')">🔌 Wiring</button>
+    <button class="tab" onclick="switchTab('deploy')">☁️ Deploy</button>
+  </div>
+
+  <!-- ════════════ TAB: PREDICT ════════════ -->
+  <div class="tab-content active" id="tab-predict">
+    <div class="panel">
+      <div class="panel-title">🔮 &nbsp;RUN FLOOD PREDICTION</div>
+      <div class="form-grid">
+        <div class="form-group"><label>Rainfall (mm)</label>
+          <input type="number" id="f-rain" value="180" min="0" max="500" step="0.1"></div>
+        <div class="form-group"><label>Temperature (°C)</label>
+          <input type="number" id="f-temp" value="24" min="-10" max="50" step="0.1"></div>
+        <div class="form-group"><label>Humidity (%)</label>
+          <input type="number" id="f-humid" value="85" min="0" max="100" step="0.1"></div>
+        <div class="form-group"><label>Water Level (m)</label>
+          <input type="number" id="f-water" value="2.5" min="0" max="20" step="0.01"></div>
+        <div class="form-group"><label>River Discharge (m³/s)</label>
+          <input type="number" id="f-disc" value="120" min="0" max="5000" step="1"></div>
+        <div class="form-group"><label>Elevation (m)</label>
+          <input type="number" id="f-elev" value="300" min="0" max="5000" step="1"></div>
+        <div class="form-group"><label>Pressure (hPa)</label>
+          <input type="number" id="f-pres" value="1005" min="900" max="1050" step="0.1"></div>
+        <div class="form-group"><label>Soil Moisture (%)</label>
+          <input type="number" id="f-soil" value="70" min="0" max="100" step="0.1"></div>
+        <div class="form-group"><label>Land Cover</label>
+          <select id="f-lc">
+            <option>Agricultural</option><option>Forest</option>
+            <option>Urban</option><option>Water Body</option><option>Desert</option>
+          </select></div>
+        <div class="form-group"><label>Soil Type</label>
+          <select id="f-st">
+            <option>Clay</option><option>Loam</option>
+            <option>Sandy</option><option>Silt</option><option>Peat</option>
+          </select></div>
+        <div class="form-group"><label>Infrastructure</label>
+          <select id="f-infra"><option value="1">Present</option><option value="0">Absent</option></select></div>
+        <div class="form-group"><label>Historical Floods</label>
+          <select id="f-hist"><option value="0">No</option><option value="1">Yes</option></select></div>
+      </div>
+      <div class="flex-end">
+        <button class="btn btn-ghost" onclick="fillSafe()">✅ Safe Sample</button>
+        <button class="btn btn-ghost" onclick="fillHigh()">⚠️ High Risk Sample</button>
+        <button class="btn btn-primary" id="pred-btn" onclick="runPrediction()">🔮 Run Prediction</button>
+      </div>
+    </div>
+
+    <!-- Result panel -->
+    <div class="panel mt-4" id="result-panel" style="display:none">
+      <div class="panel-title">🎯 &nbsp;PREDICTION RESULT</div>
+      <div class="grid-3">
+        <!-- Arc gauge -->
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px;justify-content:center">
+          <svg class="arc-svg" width="160" height="115" viewBox="0 0 160 115">
+            <defs>
+              <linearGradient id="ag" x1="0%" y1="0%" x2="100%" y2="0%">
+                <stop offset="0%" style="stop-color:#0066ff"/>
+                <stop offset="100%" style="stop-color:#00d4ff"/>
+              </linearGradient>
+            </defs>
+            <path d="M 20 98 A 60 60 0 0 1 140 98" fill="none" stroke="#1a2a40" stroke-width="13" stroke-linecap="round"/>
+            <path id="arc-fill" d="M 20 98 A 60 60 0 0 1 140 98" fill="none" stroke="url(#ag)"
+              stroke-width="13" stroke-linecap="round"
+              stroke-dasharray="188.5" stroke-dashoffset="188.5"
+              style="transition:stroke-dashoffset 1s ease,stroke .5s"/>
+            <text x="80" y="82" text-anchor="middle" fill="#00d4ff"
+              font-family="Space Mono" font-size="22" font-weight="700" id="arc-txt">0%</text>
+            <text x="80" y="99" text-anchor="middle" fill="#5a7a99"
+              font-family="Space Mono" font-size="9">PROBABILITY</text>
+          </svg>
+        </div>
+        <!-- Verdict -->
+        <div style="display:flex;flex-direction:column;gap:12px;justify-content:center">
+          <div>
+            <div style="font-size:10px;color:var(--muted);font-family:Space Mono;letter-spacing:1px">VERDICT</div>
+            <div style="font-size:20px;font-weight:800;margin-top:4px" id="res-verdict">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);font-family:Space Mono;letter-spacing:1px">RISK LEVEL</div>
+            <div style="font-size:17px;font-weight:700;margin-top:4px" id="res-risk">—</div>
+          </div>
+          <div>
+            <div style="font-size:10px;color:var(--muted);font-family:Space Mono;letter-spacing:1px">ACTION</div>
+            <div style="font-size:12px;color:var(--warn);margin-top:4px;line-height:1.4" id="res-action">—</div>
+          </div>
+        </div>
+        <!-- Model votes -->
+        <div style="display:flex;flex-direction:column;gap:6px;justify-content:center">
+          <div class="panel-title" style="margin-bottom:6px">MODEL VOTES</div>
+          <div id="model-votes"></div>
+        </div>
+      </div>
+      <div id="sms-row" class="mt-4" style="display:none;align-items:center;gap:10px;
+        color:var(--safe);font-family:Space Mono;font-size:12px">
+        📱 <span id="sms-txt"></span>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ TAB: MODELS ════════════ -->
+  <div class="tab-content" id="tab-models">
+    <div class="panel">
+      <div class="panel-title">📊 &nbsp;ML MODEL COMPARISON</div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr>
+            <th>Model</th><th>Accuracy</th><th>Precision</th>
+            <th>Recall</th><th>F1 Score</th><th>ROC-AUC</th><th>CV F1</th><th>Rank</th>
+          </tr></thead>
+          <tbody id="model-tbody"></tbody>
+        </table>
+      </div>
+      <hr class="divider">
+      <p style="font-family:Space Mono;font-size:11px;color:var(--muted);line-height:1.7">
+        📌 Dataset: 31 samples (Uttarakhand flood records), augmented ×15 with Gaussian noise.<br>
+        📌 LSTM-Inspired model uses temporal feature engineering — rolling means, diffs, interaction terms — with Gradient Boosting as the learner.<br>
+        📌 All models evaluated with 5-fold stratified cross-validation.
+      </p>
+    </div>
+    <div class="grid-2 mt-6">
+      <div class="panel">
+        <div class="panel-title">📈 &nbsp;F1 SCORE</div>
+        <canvas id="f1-chart" height="190"></canvas>
+      </div>
+      <div class="panel">
+        <div class="panel-title">🎯 &nbsp;ROC-AUC</div>
+        <canvas id="auc-chart" height="190"></canvas>
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ TAB: HISTORY ════════════ -->
+  <div class="tab-content" id="tab-history">
+    <div class="panel">
+      <div class="flex-between" style="margin-bottom:14px">
+        <div class="panel-title" style="margin:0">📋 &nbsp;PREDICTION HISTORY</div>
+        <button class="btn btn-ghost" onclick="clearHistory()">Clear</button>
+      </div>
+      <div id="history-log">
+        <div style="padding:24px 0;text-align:center;font-family:Space Mono;font-size:12px;color:var(--muted)">
+          No predictions yet.
+        </div>
+      </div>
+    </div>
+    <div class="panel mt-4">
+      <div class="panel-title">📈 &nbsp;PROBABILITY TREND</div>
+      <canvas id="trend-chart" height="190"></canvas>
+    </div>
+  </div>
+
+  <!-- ════════════ TAB: WIRING ════════════ -->
+  <div class="tab-content" id="tab-wiring">
+    <div class="grid-2">
+      <div class="panel">
+        <div class="panel-title">🔌 &nbsp;PIN CONNECTIONS — ARDUINO UNO</div>
+        <table class="wire-table">
+          <tr><td>Rainfall AO</td><td>→ A0</td><td>Analog rainfall intensity</td></tr>
+          <tr><td>Soil Moisture AO</td><td>→ A1</td><td>Analog soil saturation</td></tr>
+          <tr><td>Water Level S</td><td>→ A2</td><td>Analog water depth</td></tr>
+          <tr><td>DHT11 DATA</td><td>→ D2</td><td>Temp + Humidity (+ 10kΩ to 5V)</td></tr>
+          <tr><td>BMP180 SDA</td><td>→ A4</td><td>I2C data</td></tr>
+          <tr><td>BMP180 SCL</td><td>→ A5</td><td>I2C clock</td></tr>
+          <tr><td>All VCC pins</td><td>→ 5V</td><td>Power</td></tr>
+          <tr><td>All GND pins</td><td>→ GND</td><td>Ground</td></tr>
+          <tr><td>USB cable</td><td>→ PC</td><td>Serial data + power</td></tr>
+        </table>
+        <div style="margin-top:16px;font-family:Space Mono;font-size:11px;color:var(--muted);line-height:1.8">
+          ⚠️ DHT11 <strong>requires</strong> a 10kΩ pull-up resistor<br>
+          between the 5V pin and the DATA pin (D2).<br>
+          Without it, temperature readings will fail.
+        </div>
+      </div>
+      <div class="panel">
+        <div class="panel-title">📦 &nbsp;COMPONENTS LIST</div>
+        <div style="font-family:Space Mono;font-size:13px;line-height:2.2">
+          <div>1× Arduino UNO</div>
+          <div>1× Rainfall Sensor Module (YL-83)</div>
+          <div>1× Capacitive Soil Moisture Sensor</div>
+          <div>1× Analog Water Level Sensor</div>
+          <div>1× DHT11 Temperature & Humidity</div>
+          <div>1× BMP180 Barometric Pressure (I2C)</div>
+          <div>1× 10kΩ resistor</div>
+          <div>1× Breadboard + jumper wires</div>
+          <div>1× USB A-to-B cable</div>
+          <div>1× PC / Laptop (runs serial_bridge.py)</div>
+        </div>
+      </div>
+    </div>
+    <div class="panel mt-4">
+      <div class="panel-title">🔄 &nbsp;DATA FLOW</div>
+      <div style="font-family:Space Mono;font-size:12px;line-height:2;color:var(--muted)">
+        <span style="color:var(--accent)">Sensors</span> → read every 30s →
+        <span style="color:var(--accent)">Arduino</span> → JSON over USB Serial →
+        <span style="color:var(--accent)">serial_bridge.py</span> → HTTP POST →
+        <span style="color:var(--accent)">Flask API (Render)</span> → ML ensemble →
+        <span style="color:var(--accent)">Prediction response</span> + 
+        <span style="color:var(--danger)">Twilio SMS</span> (if risk ≥ 50%)
+      </div>
+    </div>
+  </div>
+
+  <!-- ════════════ TAB: DEPLOY ════════════ -->
+  <div class="tab-content" id="tab-deploy">
+    <div class="panel">
+      <div class="panel-title">☁️ &nbsp;BACKEND — RENDER.COM (FREE)</div>
+      <div style="display:flex;flex-direction:column;gap:20px">
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">1</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Push to GitHub</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              Create a repo on github.com and push the entire FloodSense folder.<br>
+              Make sure the <code style="color:var(--accent)">models/</code> folder with <code style="color:var(--accent)">.pkl</code> files is included.
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">2</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Create a Web Service on Render.com</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              New + → Web Service → connect GitHub repo<br>
+              Build command: <code style="color:var(--accent)">pip install -r requirements.txt</code><br>
+              Start command: <code style="color:var(--accent)">gunicorn app:app --workers 2 --bind 0.0.0.0:$PORT</code><br>
+              Plan: <code style="color:var(--safe)">Free</code>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">3</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Add Environment Variables</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              <code style="color:var(--accent)">TWILIO_ACCOUNT_SID</code> &nbsp;= ACxxxx...<br>
+              <code style="color:var(--accent)">TWILIO_AUTH_TOKEN</code> &nbsp;&nbsp;= xxxx...<br>
+              <code style="color:var(--accent)">TWILIO_FROM_NUMBER</code> &nbsp;= +1XXXXXXXXXX<br>
+              <code style="color:var(--accent)">ALERT_PHONE_NUMBERS</code> = +919XXXXXXXXX
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">4</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Connect this Dashboard</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              After deploy, your API URL will be:<br>
+              <code style="color:var(--accent)">https://floodsense-api.onrender.com</code><br>
+              Click ⚙️ Settings above and paste your URL there.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+
+    <div class="panel mt-4">
+      <div class="panel-title">🌐 &nbsp;FRONTEND — GITHUB PAGES (FREE, THIS FILE)</div>
+      <div style="display:flex;flex-direction:column;gap:18px">
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">1</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Create a separate GitHub repo for the frontend</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              Name it: <code style="color:var(--accent)">floodsense-dashboard</code><br>
+              Upload: <code style="color:var(--accent)">index.html</code>, <code style="color:var(--accent)">404.html</code>, <code style="color:var(--accent)">_config.yml</code>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">2</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Enable GitHub Pages</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              Repo → Settings → Pages<br>
+              Source: <code style="color:var(--accent)">Deploy from a branch</code> → <code style="color:var(--accent)">main</code> → <code style="color:var(--accent)">/ (root)</code><br>
+              Click Save. Live in ~60 seconds at:<br>
+              <code style="color:var(--safe)">https://YOUR_USERNAME.github.io/floodsense-dashboard</code>
+            </div>
+          </div>
+        </div>
+
+        <div style="display:flex;gap:14px;align-items:flex-start">
+          <div class="step-num">3</div>
+          <div>
+            <div style="font-weight:700;margin-bottom:4px">Set your API URL in Settings</div>
+            <div style="font-family:Space Mono;font-size:12px;color:var(--muted);line-height:1.8">
+              Open the live GitHub Pages URL in any browser.<br>
+              Click ⚙️ → paste your Render URL → Save.<br>
+              The dashboard will immediately connect to the live ML API.
+            </div>
+          </div>
+        </div>
+
+      </div>
+    </div>
+  </div>
+
+</div><!-- /layout -->
+
+<script>
+// ── Config (persisted in localStorage) ────────────────────────
+const CFG_KEY = 'floodsense_cfg';
+let cfg = { apiUrl: '', pollInterval: 0 };
+try { const s = localStorage.getItem(CFG_KEY); if(s) cfg = {...cfg,...JSON.parse(s)}; } catch(e){}
+
+function saveCfg(){ try{ localStorage.setItem(CFG_KEY, JSON.stringify(cfg)); } catch(e){} }
+
+// ── Clock ──────────────────────────────────────────────────────
+function tick(){
+  document.getElementById('clock').textContent =
+    new Date().toLocaleTimeString('en-IN',{hour12:false});
+}
+setInterval(tick,1000); tick();
+
+// ── Rain animation ─────────────────────────────────────────────
+(function(){
+  const cv=document.getElementById('rain-canvas'),ctx=cv.getContext('2d');
+  function resize(){cv.width=innerWidth;cv.height=innerHeight;}
+  resize(); addEventListener('resize',resize);
+  const drops=Array.from({length:100},()=>({
+    x:Math.random()*innerWidth,y:Math.random()*innerHeight,
+    l:5+Math.random()*12,s:.8+Math.random()*2.5
+  }));
+  function draw(){
+    ctx.clearRect(0,0,cv.width,cv.height);
+    ctx.strokeStyle='rgba(0,212,255,0.55)';ctx.lineWidth=.8;
+    drops.forEach(d=>{
+      ctx.beginPath();ctx.moveTo(d.x,d.y);ctx.lineTo(d.x-.8,d.y+d.l);ctx.stroke();
+      d.y+=d.s; if(d.y>cv.height){d.y=-15;d.x=Math.random()*cv.width;}
+    });
+    requestAnimationFrame(draw);
+  }
+  draw();
+})();
+
+// ── Settings ───────────────────────────────────────────────────
+function openSettings(){
+  document.getElementById('api-url-input').value = cfg.apiUrl;
+  document.getElementById('poll-interval').value = cfg.pollInterval;
+  document.getElementById('settings-modal').classList.add('open');
+}
+function closeSettings(){ document.getElementById('settings-modal').classList.remove('open'); }
+
+document.getElementById('settings-modal').addEventListener('click', e=>{
+  if(e.target===e.currentTarget) closeSettings();
+});
+
+function saveSettings(){
+  cfg.apiUrl = document.getElementById('api-url-input').value.trim().replace(/\/$/,'');
+  cfg.pollInterval = parseInt(document.getElementById('poll-interval').value)||0;
+  saveCfg();
+  updateConnPill(null);
+  closeSettings();
+  startPolling();
+}
+
+function updateConnPill(connected){
+  const p=document.getElementById('conn-pill');
+  if(connected===true){ p.textContent='● CONNECTED'; p.style.color='var(--safe)'; p.style.borderColor='rgba(48,209,88,.4)'; }
+  else if(connected===false){ p.textContent='● OFFLINE'; p.style.color='var(--danger)'; p.style.borderColor='rgba(255,45,85,.4)'; }
+  else { p.textContent='● DEMO MODE'; p.style.color='var(--muted)'; p.style.borderColor=''; }
+}
+
+async function testAPI(){
+  const url=(document.getElementById('api-url-input').value||cfg.apiUrl).trim().replace(/\/$/,'');
+  if(!url){ showToast('No URL','Enter your Render URL first.','warn'); return; }
+  try{
+    const r=await fetch(url+'/health',{signal:AbortSignal.timeout(6000)});
+    if(r.ok){ showToast('Connected!','API is running and healthy.','ok'); }
+    else showToast('Error','API returned '+r.status,'warn');
+  }catch(e){ showToast('Unreachable','Check URL or wait for Render to wake up.','warn'); }
+}
+
+// ── Auto-poll ──────────────────────────────────────────────────
+let pollTimer=null;
+function startPolling(){
+  if(pollTimer) clearInterval(pollTimer);
+  if(cfg.pollInterval>0 && cfg.apiUrl){
+    pollTimer=setInterval(fetchLatest, cfg.pollInterval*1000);
+    document.getElementById('poll-badge').classList.add('visible');
+    fetchLatest();
+  } else {
+    document.getElementById('poll-badge').classList.remove('visible');
+  }
+}
+
+async function fetchLatest(){
+  if(!cfg.apiUrl) return;
+  try{
+    const r=await fetch(cfg.apiUrl+'/latest',{signal:AbortSignal.timeout(8000)});
+    if(!r.ok) throw new Error(r.status);
+    const d=await r.json();
+    updateConnPill(true);
+    const sens=d.latest_readings||{};
+    if(Object.keys(sens).length>0) updateSensorCards(sens);
+    const pred=sens.last_prediction;
+    if(pred) displayResult(pred);
+  }catch(e){ updateConnPill(false); }
+}
+
+// ── Tab switching ──────────────────────────────────────────────
+function switchTab(name){
+  const order=['predict','models','history','wiring','deploy'];
+  document.querySelectorAll('.tab').forEach((t,i)=>t.classList.toggle('active',order[i]===name));
+  document.querySelectorAll('.tab-content').forEach(c=>c.classList.toggle('active',c.id==='tab-'+name));
+  if(name==='models') renderModelTable();
+  if(name==='history') renderTrendChart();
+}
+
+// ── Model data ─────────────────────────────────────────────────
+const MODELS = {
+  'Random Forest':               {acc:100,  pre:100,   rec:100,   f1:100,   auc:100,  cv:100},
+  'SVM (RBF)':                   {acc:100,  pre:100,   rec:100,   f1:100,   auc:100,  cv:100},
+  'K-Nearest Neighbors':         {acc:100,  pre:100,   rec:100,   f1:100,   auc:100,  cv:100},
+  'Gradient Boosting':           {acc:99,   pre:100,   rec:97.6,  f1:98.8,  auc:100,  cv:99.0},
+  'LSTM-Inspired (GB+Temporal)': {acc:99.5, pre:99.2,  rec:99.0,  f1:99.1,  auc:100,  cv:98.5},
+  'Logistic Regression':         {acc:83,   pre:75.5,  rec:88.1,  f1:81.3,  auc:89.4, cv:74.0},
+};
+const BEST = 'Random Forest';
+
+function renderModelTable(){
+  const tbody=document.getElementById('model-tbody');
+  tbody.innerHTML='';
+  Object.entries(MODELS).sort((a,b)=>b[1].f1-a[1].f1).forEach(([name,r],i)=>{
+    const badge = name===BEST ? '<span class="badge badge-best">★ BEST</span>' :
+      r.f1>=98 ? '<span class="badge badge-great">EXCELLENT</span>' :
+      r.f1>=80 ? '<span class="badge badge-good">GOOD</span>' : '';
+    const bar=(v,c)=>`<div class="mbar"><div class="mbar-fill" style="width:${v*.55}px;background:${c}"></div>${v}%</div>`;
+    tbody.innerHTML+=`<tr>
+      <td><strong>${name}</strong> ${badge}</td>
+      <td>${r.acc}%</td><td>${r.pre}%</td><td>${r.rec}%</td>
+      <td>${bar(r.f1,r.f1>=98?'var(--safe)':'var(--accent)')}</td>
+      <td>${bar(r.auc,'var(--accent2)')}</td>
+      <td>${r.cv}%</td>
+      <td style="color:var(--muted);font-size:11px">#${i+1}</td>
+    </tr>`;
+  });
+  drawBar('f1-chart', Object.entries(MODELS).map(e=>[shorten(e[0]),e[1].f1]),'#00d4ff');
+  drawBar('auc-chart',Object.entries(MODELS).map(e=>[shorten(e[0]),e[1].auc]),'#0066ff');
+}
+
+function shorten(n){
+  return n.replace('K-Nearest Neighbors','KNN')
+          .replace('Logistic Regression','LR')
+          .replace('Random Forest','RF')
+          .replace('Gradient Boosting','GB')
+          .replace('SVM (RBF)','SVM')
+          .replace('LSTM-Inspired (GB+Temporal)','LSTM');
+}
+
+function drawBar(id,data,color){
+  const cv=document.getElementById(id); if(!cv) return;
+  const W=cv.offsetWidth||420, H=190;
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  const pad={t:22,b:36,l:8,r:8};
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const bw=(cw/data.length)*.65, gap=cw/data.length;
+
+  [25,50,75,100].forEach(v=>{
+    const y=pad.t+ch-(v/100)*ch;
+    ctx.strokeStyle='#1a2a40';ctx.lineWidth=.6;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cw,y);ctx.stroke();
+    ctx.fillStyle='#5a7a99';ctx.font='9px Space Mono';ctx.textAlign='right';
+    ctx.fillText(v+'%',pad.l+24,y+3);
+  });
+
+  data.forEach(([label,val],i)=>{
+    const x=pad.l+i*gap+gap/2-bw/2;
+    const bh=(val/100)*ch; const y=pad.t+ch-bh;
+    const g=ctx.createLinearGradient(0,y,0,y+bh);
+    g.addColorStop(0,color); g.addColorStop(1,color+'33');
+    ctx.fillStyle=g;
+    ctx.beginPath();
+    if(ctx.roundRect) ctx.roundRect(x,y,bw,bh,[4,4,0,0]);
+    else ctx.rect(x,y,bw,bh);
+    ctx.fill();
+    ctx.fillStyle='#5a7a99';ctx.font='9px Space Mono';ctx.textAlign='center';
+    ctx.fillText(label,x+bw/2,H-10);
+    ctx.fillStyle=color;ctx.font='bold 10px Space Mono';
+    ctx.fillText(val+'%',x+bw/2,y-4);
+  });
+}
+
+// ── Sample data ────────────────────────────────────────────────
+function fillHigh(){
+  setF('f-rain',285);setF('f-temp',22);setF('f-humid',97);
+  setF('f-water',4.2);setF('f-disc',520);setF('f-elev',250);
+  setF('f-pres',978);setF('f-soil',92);
+  setS('f-lc','Agricultural');setS('f-st','Clay');
+  setS('f-infra','1');setS('f-hist','1');
+}
+function fillSafe(){
+  setF('f-rain',28);setF('f-temp',32);setF('f-humid',42);
+  setF('f-water',0.3);setF('f-disc',10);setF('f-elev',520);
+  setF('f-pres',1013);setF('f-soil',25);
+  setS('f-lc','Forest');setS('f-st','Sandy');
+  setS('f-infra','0');setS('f-hist','0');
+}
+function setF(id,v){document.getElementById(id).value=v;}
+function setS(id,v){document.getElementById(id).value=v;}
+
+// ── Local heuristic (demo mode) ────────────────────────────────
+function localPredict(d){
+  let s=0;
+  if(d.rainfall_mm>200) s+=.30; else if(d.rainfall_mm>100) s+=.15;
+  if(d.water_level_m>3.0) s+=.25; else if(d.water_level_m>1.5) s+=.12;
+  if(d.humidity_pct>90) s+=.10;
+  if(d.soil_moisture_pct>80) s+=.10;
+  if(d.barometric_pressure_hpa<990) s+=.10;
+  if(d.river_discharge_m3s>300) s+=.10;
+  if(d.historical_floods) s+=.08;
+  if(['Clay','Peat'].includes(d.soil_type)) s+=.05;
+  s=Math.min(s,1);
+  const risk=s>=.75?'HIGH':s>=.5?'MODERATE':s>=.25?'LOW':'SAFE';
+  const rc={HIGH:'#ef4444',MODERATE:'#f59e0b',LOW:'#3b82f6',SAFE:'#22c55e'};
+  const ac={HIGH:'Evacuate immediately',MODERATE:'Stay alert, prepare to evacuate',
+            LOW:'Monitor conditions closely',SAFE:'No immediate action required'};
+  const noise=()=>+(s+Math.random()*.06-.03).toFixed(3);
+  return{
+    flood_predicted:s>=.5,
+    ensemble_probability:+s.toFixed(4),
+    risk_level:risk,risk_color:rc[risk],action:ac[risk],
+    model_predictions:{
+      'Random Forest':{probability:noise()},
+      'Gradient Boosting':{probability:noise()},
+      'LSTM-Inspired':{probability:noise()},
+      'Logistic Regression':{probability:noise()},
+    },
+    sms_alert:{status:s>=.5?'demo_sent':'not_sent'},
+    demo_mode:true,
+  };
+}
+
+// ── Run prediction ─────────────────────────────────────────────
+const history=[];
+
+async function runPrediction(){
+  const btn=document.getElementById('pred-btn');
+  btn.disabled=true; btn.innerHTML='<span class="spin"></span>Predicting…';
+
+  const d={
+    rainfall_mm:            +document.getElementById('f-rain').value,
+    temperature_c:          +document.getElementById('f-temp').value,
+    humidity_pct:           +document.getElementById('f-humid').value,
+    water_level_m:          +document.getElementById('f-water').value,
+    river_discharge_m3s:    +document.getElementById('f-disc').value,
+    elevation_m:            +document.getElementById('f-elev').value,
+    barometric_pressure_hpa:+document.getElementById('f-pres').value,
+    soil_moisture_pct:      +document.getElementById('f-soil').value,
+    land_cover:             document.getElementById('f-lc').value,
+    soil_type:              document.getElementById('f-st').value,
+    infrastructure:         +document.getElementById('f-infra').value,
+    historical_floods:      +document.getElementById('f-hist').value,
+    location:'Uttarakhand',
+  };
+
+  let result, demo=true;
+  if(cfg.apiUrl){
+    try{
+      const r=await fetch(cfg.apiUrl+'/predict',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify(d),
+        signal:AbortSignal.timeout(10000),
+      });
+      if(!r.ok) throw new Error('HTTP '+r.status);
+      result=await r.json(); demo=false;
+      updateConnPill(true);
+    }catch(e){ updateConnPill(false); }
+  }
+  if(!result){ result=localPredict(d); }
+
+  displayResult(result);
+  updateSensorCards(d);
+  addHistory(result,d,demo);
+
+  btn.disabled=false; btn.innerHTML='🔮 Run Prediction';
+}
+
+// ── Display result ─────────────────────────────────────────────
+const RC={HIGH:'var(--danger)',MODERATE:'var(--warn)',LOW:'var(--accent2)',SAFE:'var(--safe)'};
+const RI={HIGH:'🚨',MODERATE:'⚠️',LOW:'🔵',SAFE:'✅'};
+
+function displayResult(res){
+  const prob=res.ensemble_probability, pct=Math.round(prob*100);
+  const risk=res.risk_level, col=RC[risk]||'var(--accent)';
+
+  // Banner
+  const ban=document.getElementById('risk-banner');
+  ban.className=risk;
+  document.getElementById('banner-icon').textContent=RI[risk];
+  document.getElementById('banner-title').textContent=
+    res.flood_predicted?'🚨 FLOOD RISK DETECTED':'✅ No Immediate Flood Risk';
+  document.getElementById('banner-sub').textContent=res.action;
+  const bp=document.getElementById('banner-prob');
+  bp.textContent=pct+'%'; bp.style.color=col;
+
+  // Arc
+  const offset=188.5-(prob*188.5);
+  const arc=document.getElementById('arc-fill');
+  arc.style.strokeDashoffset=offset; arc.style.stroke=col;
+  const at=document.getElementById('arc-txt');
+  at.textContent=pct+'%'; at.style.fill=col;
+
+  // Text
+  document.getElementById('res-verdict').textContent=res.flood_predicted?'FLOOD LIKELY':'NO FLOOD';
+  document.getElementById('res-verdict').style.color=col;
+  document.getElementById('res-risk').textContent=risk+' RISK';
+  document.getElementById('res-risk').style.color=col;
+  document.getElementById('res-action').textContent=res.action;
+
+  // Model votes
+  const mv=document.getElementById('model-votes');
+  mv.innerHTML='';
+  if(res.model_predictions){
+    Object.entries(res.model_predictions).forEach(([name,pred])=>{
+      const p=typeof pred==='object'?pred.probability:pred;
+      const pc=Math.round(p*100);
+      mv.innerHTML+=`<div style="display:flex;justify-content:space-between;
+        align-items:center;padding:3px 0;font-family:Space Mono;font-size:11px">
+        <span style="color:var(--muted)">${name}</span>
+        <span style="color:${pc>=50?'var(--danger)':'var(--safe)'};font-weight:700">${pc}%</span>
+      </div>`;
+    });
+  }
+
+  // SMS row
+  const smsRow=document.getElementById('sms-row');
+  if(res.flood_predicted){
+    smsRow.style.display='flex';
+    const st=res.sms_alert?.status;
+    document.getElementById('sms-txt').textContent=
+      st==='sent'       ? '📱 SMS alert sent to emergency contacts via Twilio!' :
+      st==='demo_sent'  ? '📱 [Demo] SMS would be sent via Twilio in production' :
+                          '📱 Configure Twilio env vars on Render to enable SMS';
+    if(st==='sent') showToast('SMS Sent!','Emergency contacts notified via Twilio','ok');
+    else showToast('High Risk!','Flood probability: '+pct+'% — SMS fires in production','warn');
+  } else { smsRow.style.display='none'; }
+
+  document.getElementById('result-panel').style.display='block';
+}
+
+// ── Update sensor cards ────────────────────────────────────────
+function updateSensorCards(d){
+  function set(vid,bid,val,max){
+    const el=document.getElementById(vid);
+    if(!el) return;
+    el.childNodes[0].textContent=isNaN(val)?'?':parseFloat(val).toFixed(1);
+    document.getElementById(bid).style.width=Math.min((val/max)*100,100)+'%';
+  }
+  set('sv-rain','sb-rain',d.rainfall_mm,300);
+  set('sv-temp','sb-temp',d.temperature_c,50);
+  set('sv-humid','sb-humid',d.humidity_pct,100);
+  set('sv-water','sb-water',d.water_level_m,10);
+  set('sv-soil','sb-soil',d.soil_moisture_pct,100);
+  set('sv-pres','sb-pres',d.barometric_pressure_hpa,1050);
+  set('sv-disc','sb-disc',d.river_discharge_m3s,1000);
+}
+
+// ── History ────────────────────────────────────────────────────
+function addHistory(res,d,demo){
+  history.unshift({
+    time:new Date().toLocaleTimeString('en-IN',{hour12:false}),
+    risk:res.risk_level,
+    prob:Math.round(res.ensemble_probability*100),
+    sms:res.sms_alert?.status==='sent',
+    rain:d.rainfall_mm,
+    demo,
+  });
+  if(history.length>60) history.pop();
+  renderHistory();
+}
+
+function renderHistory(){
+  const el=document.getElementById('history-log');
+  if(!history.length){
+    el.innerHTML='<div style="padding:24px 0;text-align:center;font-family:Space Mono;font-size:12px;color:var(--muted)">No predictions yet.</div>';
+    return;
+  }
+  el.innerHTML=history.map(e=>`
+    <div class="log-entry">
+      <span class="log-time">${e.time}</span>
+      <span class="log-risk risk-${e.risk}">${e.risk}</span>
+      <span style="font-family:Space Mono;font-size:13px">${e.prob}%</span>
+      <span style="color:var(--muted);font-size:11px;font-family:Space Mono">🌧 ${parseFloat(e.rain).toFixed(1)}mm</span>
+      ${e.sms?'<span style="color:var(--safe);font-size:10px;font-family:Space Mono">📱 SMS</span>':''}
+      ${e.demo?'<span style="color:var(--muted);font-size:10px;font-family:Space Mono">[demo]</span>':''}
+    </div>`).join('');
+}
+
+function clearHistory(){ history.length=0; renderHistory(); }
+
+// ── Trend chart ────────────────────────────────────────────────
+function renderTrendChart(){
+  const cv=document.getElementById('trend-chart'); if(!cv) return;
+  const W=cv.offsetWidth||580, H=190;
+  cv.width=W; cv.height=H;
+  const ctx=cv.getContext('2d');
+  ctx.clearRect(0,0,W,H);
+  if(history.length<2){
+    ctx.fillStyle='#5a7a99';ctx.font='12px Space Mono';ctx.textAlign='center';
+    ctx.fillText('Need 2+ predictions to show trend',W/2,95); return;
+  }
+  const data=[...history].reverse().slice(-20);
+  const pad={t:18,b:28,l:38,r:14};
+  const cw=W-pad.l-pad.r, ch=H-pad.t-pad.b;
+  const step=cw/(data.length-1);
+
+  // grid
+  [0,25,50,75,100].forEach(v=>{
+    const y=pad.t+ch-(v/100)*ch;
+    ctx.strokeStyle='#1a2a40';ctx.lineWidth=.5;
+    ctx.beginPath();ctx.moveTo(pad.l,y);ctx.lineTo(pad.l+cw,y);ctx.stroke();
+    ctx.fillStyle='#5a7a99';ctx.font='9px Space Mono';ctx.textAlign='right';
+    ctx.fillText(v+'%',pad.l-4,y+3);
+  });
+
+  // area
+  ctx.beginPath();
+  data.forEach((d,i)=>{
+    const x=pad.l+i*step, y=pad.t+ch-(d.prob/100)*ch;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.lineTo(pad.l+(data.length-1)*step,pad.t+ch);
+  ctx.lineTo(pad.l,pad.t+ch); ctx.closePath();
+  const g=ctx.createLinearGradient(0,pad.t,0,pad.t+ch);
+  g.addColorStop(0,'rgba(0,212,255,.25)');g.addColorStop(1,'rgba(0,212,255,0)');
+  ctx.fillStyle=g;ctx.fill();
+
+  // line
+  ctx.beginPath();ctx.strokeStyle='#00d4ff';ctx.lineWidth=2;
+  data.forEach((d,i)=>{
+    const x=pad.l+i*step,y=pad.t+ch-(d.prob/100)*ch;
+    i===0?ctx.moveTo(x,y):ctx.lineTo(x,y);
+  });
+  ctx.stroke();
+
+  // dots
+  data.forEach((d,i)=>{
+    const x=pad.l+i*step,y=pad.t+ch-(d.prob/100)*ch;
+    ctx.beginPath();ctx.arc(x,y,4,0,Math.PI*2);
+    ctx.fillStyle=d.prob>=50?'#ff2d55':'#30d158';ctx.fill();
+  });
+}
+
+// ── Toast ──────────────────────────────────────────────────────
+let toastTimer=null;
+function showToast(title,msg,type='ok'){
+  const t=document.getElementById('toast');
+  document.getElementById('toast-title').textContent=title;
+  document.getElementById('toast-msg').textContent=msg;
+  t.style.borderColor=type==='ok'?'var(--safe)':'var(--warn)';
+  document.getElementById('toast-title').style.color=type==='ok'?'var(--safe)':'var(--warn)';
+  t.classList.add('show');
+  if(toastTimer) clearTimeout(toastTimer);
+  toastTimer=setTimeout(()=>t.classList.remove('show'),4000);
+}
+
+// ── Init ───────────────────────────────────────────────────────
+renderModelTable();
+startPolling();
+if(cfg.apiUrl) updateConnPill(null);
+</script>
+</body>
+</html>
